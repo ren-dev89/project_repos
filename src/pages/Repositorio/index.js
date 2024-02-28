@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { FaArrowLeft } from "react-icons/fa";
 import * as S from "./styles";
@@ -9,31 +9,61 @@ const Repositorio = () => {
   const [currentRepo, setCurrentRepo] = useState({});
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [filterIndex, setFilterIndex] = useState(0);
 
   const params = useParams();
+
+  const filters = useMemo(
+    () => [
+      { state: "all", label: "Todas" },
+      { state: "open", label: "Abertas" },
+      { state: "closed", label: "Fechadas" },
+    ],
+    []
+  );
 
   useEffect(() => {
     if (!params.repositorio) {
       return;
     }
 
-    const load = () => {
-      Promise.all([
-        api.get(`/repos/${params.repositorio}`),
-        api.get(`/repos/${params.repositorio}/issues`, {
-          params: { state: "open", per_page: 5 },
-        }),
-      ])
-        .then(responses => {
-          setCurrentRepo(responses[0].data);
-          setIssues(responses[1].data);
-        })
+    const loadRepo = () => {
+      api
+        .get(`/repos/${params.repositorio}`)
+        .then(response => setCurrentRepo(response.data))
         .catch(error => console.error(error))
         .finally(() => setLoading(false));
     };
 
-    load();
+    loadRepo();
   }, [params]);
+
+  useEffect(() => {
+    const loadIssues = () => {
+      api
+        .get(`/repos/${params.repositorio}/issues`, {
+          params: {
+            state: filters[filterIndex].state,
+            per_page: 5,
+            page,
+          },
+        })
+        .then(response => setIssues(response.data))
+        .catch(error => console.error(error));
+    };
+
+    loadIssues();
+  }, [params, page, filters, filterIndex]);
+
+  const handlePage = action => {
+    const newPage = action === "back" ? page - 1 : page + 1;
+    setPage(newPage);
+  };
+
+  const handleFilter = index => {
+    setFilterIndex(index);
+  };
 
   if (loading) {
     return (
@@ -55,6 +85,18 @@ const Repositorio = () => {
         <p>{currentRepo.description}</p>
       </S.Owner>
 
+      <S.FilterList $active={filterIndex}>
+        {filters.map((filter, i) => (
+          <button
+            type="button"
+            key={filter.label}
+            onClick={() => handleFilter(i)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </S.FilterList>
+
       <S.IssuesList>
         {issues.map(issue => (
           <li key={issue.id}>
@@ -74,6 +116,20 @@ const Repositorio = () => {
           </li>
         ))}
       </S.IssuesList>
+
+      <S.PageActions>
+        <button
+          type="button"
+          onClick={() => handlePage("back")}
+          disabled={page === 1}
+        >
+          Voltar
+        </button>
+
+        <button type="button" onClick={() => handlePage("next")}>
+          Próxima
+        </button>
+      </S.PageActions>
     </S.Container>
   );
 };
